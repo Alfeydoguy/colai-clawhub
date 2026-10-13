@@ -17,12 +17,15 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const crate = join(root, "toolbar", "src-tauri");
-const logFile = join(root, "toolbar", "src-tauri", "target", "build.log");
+// Where cargo puts its output. `CARGO_TARGET_DIR` is honoured, so a checkout in a synced folder
+// (iCloud Drive, OneDrive) can keep a gigabyte of build products out of it.
+const targetDir = process.env.CARGO_TARGET_DIR ?? join(root, "toolbar", "src-tauri", "target");
+const logFile = join(targetDir, "build.log");
 // Windows names its binaries `.exe`, and the launcher looks for the built one under the
 // same name — so the suffix rides along everywhere the file is named.
 const isWindows = process.platform === "win32";
 const exe = isWindows ? ".exe" : "";
-const compiled = join(crate, "target", "release", `colai-toolbar${exe}`);
+const compiled = join(targetDir, "release", `colai-toolbar${exe}`);
 // `.built`, not `colai-toolbar`, because that name is taken. `bin/colai-toolbar` is the
 // launcher the Claude Code plugin puts on PATH — a tracked shell script — and a local
 // build dropping a 13 MB binary on top of it would work here and be committed by mistake
@@ -106,14 +109,21 @@ const built = spawnSync("cargo", ["build", "--release", "--locked"], {
     // still worth having in a crash report.
     // The standard library's own panic locations resolve to the local rustup toolchain, so
     // that home is remapped too — on Windows it is `C:\Users\<name>\.rustup`.
-    RUSTFLAGS: [
-      process.env.RUSTFLAGS ?? "",
+    //
+    // Passed as `CARGO_ENCODED_RUSTFLAGS`, whose flags are separated by a control character,
+    // and not as `RUSTFLAGS`, which cargo splits on spaces. A checkout under a path with a
+    // space in it — iCloud Drive's `Mobile Documents`, or a Windows `C:\Users\Some Name` —
+    // put that space inside a flag and the build died with "--remap-path-prefix must contain
+    // '='". It takes precedence over `RUSTFLAGS`, so the caller's own flags are carried over.
+    CARGO_ENCODED_RUSTFLAGS: [
+      ...(process.env.RUSTFLAGS ?? "").split(/\s+/).filter(Boolean),
       `--remap-path-prefix=${process.env.CARGO_HOME ?? join(home, ".cargo")}=/cargo`,
       `--remap-path-prefix=${process.env.RUSTUP_HOME ?? join(home, ".rustup")}=/rustup`,
       `--remap-path-prefix=${crate}=/colai`,
-    ]
-      .filter(Boolean)
-      .join(" "),
+      // After the crate's, so build products under a `CARGO_TARGET_DIR` elsewhere are named
+      // too; for the default directory, inside the crate, it only renames `target/` itself.
+      `--remap-path-prefix=${targetDir}=/target`,
+    ].join("\x1f"),
   },
 });
 const took = Math.round((Date.now() - began) / 1000);
@@ -149,7 +159,7 @@ try {
   // things. The dependency probe above went to some trouble to be kind; a raw ENOENT
   // stack here would undo it.
   console.error(`\ncolai: the toolbar built, but could not be staged: ${String(error)}`);
-  console.error(`Expected it at ${compiled}. Is CARGO_TARGET_DIR set?\n`);
+  console.error(`Expected it at ${compiled}.\n`);
   process.exit(1);
 }
 

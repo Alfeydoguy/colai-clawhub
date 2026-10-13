@@ -110,6 +110,43 @@ const CLAUDE_NAMES: &[&str] = &["claude.cmd", "claude.exe", "claude.bat", "claud
 #[cfg(not(windows))]
 const CLAUDE_NAMES: &[&str] = &["claude"];
 
+/// The first `claude` in these directories, in order.
+fn find_claude_in(dirs: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+    for dir in dirs.into_iter().filter(|dir| !dir.as_os_str().is_empty()) {
+        for name in CLAUDE_NAMES {
+            let here = dir.join(name);
+            if here.is_file() {
+                // Resolved, because what is on PATH is usually a shim.
+                return Some(fs::canonicalize(&here).unwrap_or(here));
+            }
+        }
+    }
+    None
+}
+
+/// Where Claude Code usually lands when PATH has not been told: its own installer's
+/// `~/.local/bin`, the older `~/.claude/local`, a global npm or bun install, and Homebrew
+/// on Apple Silicon and on Intel. A Mac only: it is the platform whose GUI launches (Dock,
+/// login items, launchd) start a program with a PATH that has none of these in it. On the
+/// others the toolbar is started from the same desktop session, and the same PATH, as the
+/// terminal it was installed from.
+#[cfg(target_os = "macos")]
+fn usual_places() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+        for under in [".local/bin", ".claude/local", ".npm-global/bin", ".bun/bin"] {
+            dirs.push(home.join(under));
+        }
+    }
+    dirs.push(PathBuf::from("/opt/homebrew/bin"));
+    dirs.push(PathBuf::from("/usr/local/bin"));
+    dirs
+}
+#[cfg(not(target_os = "macos"))]
+fn usual_places() -> Vec<PathBuf> {
+    Vec::new()
+}
+
 /// A running `claude`, and which conversation it is having.
 struct Talking {
     child: Child,
@@ -129,7 +166,8 @@ pub(crate) struct Session {
 }
 
 impl Session {
-    /// The `claude` on PATH, if there is one.
+    /// The `claude` on PATH, if there is one — and, on a Mac, a few places it is usually found
+    /// when PATH is not the one a terminal has.
     ///
     /// Walked here rather than asked of a shell. `sh -lc "command -v claude"` sources the
     /// user's rc files, and on at least one machine that died on a dangling snap path and
@@ -140,20 +178,30 @@ impl Session {
             let named = PathBuf::from(said);
             return named.exists().then_some(named);
         }
-        let path = std::env::var_os("PATH")?;
         // `split_paths` for the separator, not a literal `:` — Windows joins PATH with `;`
         // and its entries *contain* colons (`C:\…`), so splitting on `:` there finds no
         // directory that exists. Same call `screen::on_path` already uses.
-        for dir in std::env::split_paths(&path).filter(|dir| !dir.as_os_str().is_empty()) {
-            for name in CLAUDE_NAMES {
-                let here = dir.join(name);
-                if here.is_file() {
-                    // Resolved, because what is on PATH is usually a shim.
-                    return Some(fs::canonicalize(&here).unwrap_or(here));
+        if let Some(path) = std::env::var_os("PATH") {
+            if let Some(found) = find_claude_in(std::env::split_paths(&path)) {
+                return Some(found);
+            }
+        }
+        // Not on PATH, which is ordinary on a Mac (and only there — see `usual_places`): a toolbar started from a Dock icon, a login
+        // item or launchd inherits `/usr/bin:/bin:/usr/sbin:/sbin` and nothing a shell profile
+        // added, so a `claude` in `~/.local/bin` or under Homebrew is invisible to it and the
+        // toolbar reports there is no Claude Code on a machine that has one.
+        //
+        // The copy running the session that started this toolbar is the best answer — Claude
+        // Code names itself in `CLAUDE_CODE_EXECPATH` — then the places an install usually
+        // lands.
+        if cfg!(target_os = "macos") {
+            if let Some(own) = std::env::var_os("CLAUDE_CODE_EXECPATH").map(PathBuf::from) {
+                if own.is_file() {
+                    return Some(fs::canonicalize(&own).unwrap_or(own));
                 }
             }
         }
-        None
+        find_claude_in(usual_places())
     }
 
     pub fn new(claude: PathBuf) -> Self {
@@ -3812,5 +3860,47 @@ mod remembering_the_list {
         fs::remove_file(&one).unwrap();
         assert!(conversations_under(&projects.0, 400, &mut held).is_empty());
         assert!(held.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod finding_claude {
+    use super::*;
+
+    fn dir_with(name: &str, claude: bool) -> PathBuf {
+        let at = std::env::temp_dir().join(format!("colai-find-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&at);
+        std::fs::create_dir_all(&at).expect("a directory");
+        if claude {
+            std::fs::write(at.join(CLAUDE_NAMES[0]), b"#!/bin/sh\n").expect("a claude");
+        }
+        at
+    }
+
+    #[test]
+    fn the_first_directory_that_has_one_wins() {
+        let empty = dir_with("empty", false);
+        let first = dir_with("first", true);
+        let second = dir_with("second", true);
+        let found = find_claude_in([empty.clone(), first.clone(), second.clone()]);
+        let wanted = std::fs::canonicalize(first.join(CLAUDE_NAMES[0])).expect("canonical");
+        assert_eq!(found, Some(wanted));
+        for gone in [empty, first, second] {
+            let _ = std::fs::remove_dir_all(gone);
+        }
+    }
+
+    #[test]
+    fn a_blank_entry_and_a_missing_directory_are_skipped_not_fatal() {
+        let none = std::env::temp_dir().join("colai-find-does-not-exist");
+        assert_eq!(find_claude_in([PathBuf::new(), none]), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_usual_places_include_where_claude_code_installs_itself() {
+        let places = usual_places();
+        assert!(places.iter().any(|dir| dir.ends_with(".local/bin")));
+        assert!(places.contains(&PathBuf::from("/opt/homebrew/bin")));
     }
 }
