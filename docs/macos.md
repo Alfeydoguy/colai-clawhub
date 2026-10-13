@@ -116,21 +116,26 @@ Seen to work:
   (`lsappinfo` says `UIElement`): no Dock icon, not in Cmd-Tab.
 - **Screen capture, the API.** `CGWindowListCreateImage` still returns an image at runtime on
   macOS 27, and the display mode's pixel-to-point ratio is 2.0 as `backing_scale()` assumes.
+- **2. Clicks fall through.** A click on System Settings through the overlay, where colai
+  draws nothing, reached System Settings. Over the rail the pointer was claimed by colai (the
+  automation layer reported the window under it as colai's and refused the click).
+- **9. Global shortcut.** <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> hid and then showed
+  the rail with System Settings focused.
 - **Native tests.** `cargo test` passes on the Mac (the 5 ignored tests read the machine).
 
 Fixed because of it:
 
 - The first-run hint opened *below* the rail. With the Dock set to hide, macOS reserves
   nothing along the bottom, the rail rests close to the edge, and the hint was cut off
-  mid-sentence. It now opens above the rail when it would not fit below.
+  mid-sentence. It now opens above the rail when it would not fit below (seen fixed on screen).
 - `claude` was looked up on `PATH` only, so a toolbar started from a Dock icon, a login item
   or launchd (whose `PATH` has no `~/.local/bin` or Homebrew) reported there was no Claude Code
   on a machine that has one. It now also tries `CLAUDE_CODE_EXECPATH` and the usual install
   directories.
 
-Not walked yet (the Mac locked before they could be): 2 click-through, 3 Retina hit areas,
-4 the front window, 5–6 a capture end to end with a mark drawn on it, 8 the pickers, 9 the
-global shortcut with another app focused, 10 the hand-off to a conversation. On this Mac the
+Not walked yet: 3 Retina hit areas (the rail could not be clicked from the automation used),
+4 the front window, 5–6 a capture end to end with a mark drawn on it, 8 the pickers, 10 the
+hand-off to a conversation. On this Mac the
 input-source shortcuts that share ⌃⌥Space are switched off, so the default chord is free here;
 that is not true of every Mac.
 
