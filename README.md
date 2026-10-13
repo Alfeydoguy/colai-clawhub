@@ -164,6 +164,9 @@ The one exception is the component library: opening it loads preview pictures fr
 | Which toolbar is running      | `~/.config/ai.colai.toolbar/`        |
 | The unpacked toolbar          | `~/.cache/colai/`                    |
 
+On macOS the first row is the toolbar's own WebKit storage instead, in
+`~/Library/WebKit/colai-toolbar/`; the other two are the same.
+
 Conversations are Claude Code's own, in `~/.claude/`, and colai neither adds to that nor
 keeps a second copy.
 
@@ -184,6 +187,25 @@ toolbar says so on startup, in the log.
 on startup, naming the chord. Set `COLAI_HOTKEY` to a free one and restart it. Running
 `colai-toolbar show` always works regardless: a second launch hands its argument to the
 copy already on screen.
+
+**macOS: a capture is only the wallpaper, or colai says it may not photograph the screen.**
+Screen Recording is granted to the app that started the toolbar — Terminal, iTerm, VS Code,
+or the Claude desktop app — not to `colai-toolbar`. Turn that app on in System Settings →
+Privacy & Security → Screen Recording, then quit and reopen the toolbar (`colai-toolbar quit`);
+macOS does not apply the grant to a process that is already running.
+
+**macOS: "… is requesting to bypass the system private window picker."** macOS 15 and later
+ask this, roughly monthly, of any app that captures the screen with the classic API colai
+uses. It names the app that started the toolbar, not colai. It is asking whether that app may
+keep capturing the screen; the choice is yours to make.
+
+**macOS: the hotkey does nothing.** <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> is also
+the system's "Select next source in Input menu" shortcut. If that is switched on under System
+Settings → Keyboard → Keyboard Shortcuts → Input Sources, macOS takes it first: switch it off,
+or set `COLAI_HOTKEY` to another chord.
+
+**macOS: the rail only appears on one screen.** The overlay covers the main display, the one
+with the menu bar; with more than one display, the others are not covered yet.
 
 ## Glossary
 

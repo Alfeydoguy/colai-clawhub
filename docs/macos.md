@@ -101,6 +101,44 @@ Run the toolbar with `bin/colai-toolbar show` (it prefers the build you just mad
 
 Write down anything that misbehaves with the macOS version, the VM, and the display scale.
 
+## Walked on a real Mac
+
+Checked by hand on 2026-10-13: MacBook Air (Apple M3), macOS 27.0.1, built-in display at
+the default scaled mode (1470×956 points, 2× backing), plus a second external display.
+
+Seen to work:
+
+- **11. The shipped path.** `bin/colai-toolbar show` on a fresh clone unpacked
+  `platforms/darwin-arm64/bin/colai-toolbar.gz` into `~/.cache/colai/<digest>/`, the digest
+  matched, and the toolbar ran. The binary is ad-hoc signed and carries no quarantine flag.
+- **1. It appears.** The overlay covers the main display, is transparent over the desktop and
+  draws the rail and a first-run hint over other windows. It is an accessory-policy process
+  (`lsappinfo` says `UIElement`): no Dock icon, not in Cmd-Tab.
+- **Screen capture, the API.** `CGWindowListCreateImage` still returns an image at runtime on
+  macOS 27, and the display mode's pixel-to-point ratio is 2.0 as `backing_scale()` assumes.
+- **Native tests.** `cargo test` passes on the Mac (the 5 ignored tests read the machine).
+
+Fixed because of it:
+
+- The first-run hint opened *below* the rail. With the Dock set to hide, macOS reserves
+  nothing along the bottom, the rail rests close to the edge, and the hint was cut off
+  mid-sentence. It now opens above the rail when it would not fit below.
+- `claude` was looked up on `PATH` only, so a toolbar started from a Dock icon, a login item
+  or launchd (whose `PATH` has no `~/.local/bin` or Homebrew) reported there was no Claude Code
+  on a machine that has one. It now also tries `CLAUDE_CODE_EXECPATH` and the usual install
+  directories.
+
+Not walked yet (the Mac locked before they could be): 2 click-through, 3 Retina hit areas,
+4 the front window, 5–6 a capture end to end with a mark drawn on it, 8 the pickers, 9 the
+global shortcut with another app focused, 10 the hand-off to a conversation. On this Mac the
+input-source shortcuts that share ⌃⌥Space are switched off, so the default chord is free here;
+that is not true of every Mac.
+
+Worth knowing: macOS 15 and later show a monthly "bypass the system private window picker"
+prompt for any app that uses the classic capture API, naming the app that started the toolbar.
+Moving captures to ScreenCaptureKit would stop it, and is the larger piece of work behind the
+"stable TCC identity" item below.
+
 ## Checking without a Mac
 
 `npm run check:macos` type-checks every `#[cfg(target_os = "macos")]` arm from Windows or

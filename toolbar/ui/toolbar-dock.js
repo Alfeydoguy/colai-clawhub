@@ -455,4 +455,16 @@ function showFirstHint() {
   bubble.append(shut);
 
   el.wrap.append(bubble);
+
+  // Below the rail is where it goes, unless that runs off the screen. A Mac whose Dock hides
+  // itself reserves nothing along the bottom, so the rail rests close to the edge and the
+  // bubble under it was cut off mid-sentence. Measured by layout rather than by the rect, so
+  // the fade-in's movement cannot change the answer, and put above the rail instead.
+  if (el.wrap.dataset.vertical !== "true" && el.wrap.dataset.dock !== "bottom") {
+    const under = el.rail.getBoundingClientRect().bottom + 8 + bubble.offsetHeight;
+    if (bubble.offsetHeight > 0 && under > window.innerHeight) {
+      bubble.style.top = "auto";
+      bubble.style.bottom = "calc(100% + 8px)";
+    }
+  }
 }
