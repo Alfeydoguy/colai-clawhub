@@ -7,6 +7,20 @@ is not a record of anything.
 
 ## Unreleased
 
+- **macOS: the first-run hint stays on screen.** It opened below the rail, and with the Dock set to
+  hide there is no reserved strip along the bottom, so it was cut off mid-sentence. It now opens
+  above the rail when it would not fit below.
+- **macOS: the toolbar finds `claude` when `PATH` does not have it.** Started from a Dock icon, a
+  login item or launchd, it inherited a `PATH` without `~/.local/bin` or Homebrew and reported that
+  Claude Code was not installed. It now also tries `CLAUDE_CODE_EXECPATH` and the usual install
+  directories — on a Mac only; the other platforms look where they always did.
+- **`npm run build:toolbar` works from a path with a space in it,** such as iCloud Drive's
+  `Mobile Documents`, and honours `CARGO_TARGET_DIR`.
+- **Docs: macOS.** The README says where a Mac keeps the rail's position and recent prompts, and
+  has troubleshooting for Screen Recording, the monthly "private window picker" prompt, the
+  Ctrl+Alt+Space input-source clash and the one-display limit. `docs/macos.md` records what has been
+  walked by hand on a real Mac and what has not.
+
 ## 0.4.4 — 2026-10-05
 
 - **The close key closes on one press.** It took two, the first arming it, which read as a button
